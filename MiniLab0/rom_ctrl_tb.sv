@@ -34,6 +34,12 @@ module rom_ctrl_tb();
         addr = 8'b0000_0001;
         
         @(posedge clk);
+        @(posedge clk);
+        if (data !== 8'h00)begin
+            $display("data should be all 0's when not enabled");
+            $stop();
+        end
+        
         @(negedge clk);
         
         en = 1;
