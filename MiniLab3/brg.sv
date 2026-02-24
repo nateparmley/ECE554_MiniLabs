@@ -51,7 +51,7 @@ module brg(
     end
 
     assign baud_trmt_en = (down_cntr == 16'h0000);
-    assign baud_receive_en = (down_cntr == {1'b0, divisor_buffer[15:1]});
+    assign baud_receive_en = (down_cntr == {1'b0, (divisor_buffer[15:1])});
     
 
 endmodule

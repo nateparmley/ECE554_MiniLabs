@@ -36,7 +36,9 @@ module spart(
     wire [7:0] receive_buf;
     wire spart_trmt_en;
     wire baud_trmt_en;
-    wire baud_receive_en;
+    wire baud_receive_en;  
+    wire transmitting;
+    reg transmitting_ff;
 
     // BUS INTERFACE //
     assign spart_rd_status_en = (ioaddr == 2'b01) & iorw;
@@ -47,7 +49,18 @@ module spart(
                                                     : (spart_rd_receive_buf_en ? receive_buf
                                                                                 : 8'hzz));
     
-    assign spart_trmt_en = (ioaddr == 2'b00) & ~iorw;
+    assign transmitting = (ioaddr == 2'b00) & ~iorw;
+
+    // assert UART trmt signal on rising edge of transmitting
+    assign spart_trmt_en = transmitting & ~transmitting_ff; 
+
+    always @(posedge clk, negedge rst) begin
+        if (!rst) 
+            transmitting_ff <= 1'b0;
+        else begin
+            transmitting_ff <= transmitting;
+        end
+    end
 
     // BAUD RATE GENERATOR //
     brg iBRG (

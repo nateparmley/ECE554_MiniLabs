@@ -1,195 +1,233 @@
 module lab1_spart_tb();
 
- //////////// CLOCK //////////
-    logic               CLOCK_50;
-    logic               CLOCK2_50;
-    logic               CLOCK3_50;
-    logic               CLOCK4_50;
+   // DUT Signals
+   logic clk, rst_n;
+   logic [1:0] br_cfg;
+   logic txd_dut, rxd_dut;
 
- //////////// SEG7 //////////
-    logic   [6:0]  HEX0;
-    logic   [6:0]  HEX1;
-    logic   [6:0]  HEX2;
-    logic   [6:0]  HEX3;
-    logic   [6:0]  HEX4;
-    logic   [6:0]  HEX5;
+    lab1_spart iDUT(
+      .CLOCK_50(clk),
+      .CLOCK2_50(),
+      .CLOCK3_50(),
+      .CLOCK4_50(),
+      .HEX0(),
+      .HEX1(),
+      .HEX2(),
+      .HEX3(),
+      .HEX4(),
+      .HEX5(),
+      .KEY({3'b000, ~rst_n}),
+      .LEDR(),
+      .SW({br_cfg, 8'h00}),
+      .GPIO_TX(txd_dut),
+      .GPIO_RX(rxd_dut)
+);
 
-//////////// KEY //////////
-    logic        [3:0]  KEY;
+   // Testbench Driver Signals 
+    logic iorw_tb, rda_tb, tbr_tb, txd_tb, rxd_tb, iocs_tb;
+    logic [1:0] ioaddr_tb;
+    tri   [7:0] databus_tb;
+    logic [15:0] baud_cnt_tb;
+    logic [7:0] data_tb;
+    logic [1:0] databus_cntrl_tb;
 
- //////////// LED //////////
-    logic		   [9:0]		LEDR;
+    assign rxd_dut = txd_tb;
+    assign rxd_tb = txd_dut;
 
- //////////// SW //////////
-    logic        [9:0]  SW;
+    spart spart1(.clk(clk),
+                .rst(rst_n),
+                .iocs(iocs_tb),
+                .iorw(iorw_tb),
+                .rda(rda_tb),
+                .tbr(tbr_tb),
+                .ioaddr(ioaddr_tb),
+                .databus(databus_tb),
+                .txd(txd_tb),
+                .rxd(rxd_tb)
+            );
 
- //////////// GPIO_0, GPIO_0 connect to GPIO Default //////////
-    logic        GPIO_TX;
-    logic        GPIO_RX;
+    typedef enum logic [2:0] {IDLE, LOAD_LB, LOAD_HB, START_SEND, SEND, START_RECEIVE, RECEIVE} state_t;
 
-    lab1_spart iDUT(.*);
+    state_t state, nxt_state;
 
-    logic iorw, rda, tbr, txd, rxd;
-    logic [1:0] ioaddr;
-    logic [7:0] databus;
-    logic [15:0] baud_cnt;
-
-    assign GPIO_RX = txd;
-    assign rxd = GPIO_TX;
+    assign databus_tb = (databus_cntrl_tb == 2'b11) ? data_tb
+                                             : ((databus_cntrl_tb == 2'b10) ? baud_cnt_tb[15:8]
+                                                                        : ((databus_cntrl_tb == 2'b01) ? baud_cnt_tb[7:0]
+                                                                                                   : 8'hzz));
 
     localparam FREQUENCY = 25000000;
 
-    spart spart1(.clk(CLOCK_50),
-                .rst(~KEY[0]),
-                .iocs(1'b0),
-                .iorw(iorw),
-                .rda(rda),
-                .tbr(tbr),
-                .ioaddr(ioaddr),
-                .databus(databus),
-                .txd(txd),
-                .rxd(rxd)
-            );
-
-    always_comb begin : decoder
-        unique case(SW[9:8])
-           2'b00: baud_cnt = int'((FREQUENCY/(16*4800)) - 1);
-           2'b01: baud_cnt = int'((FREQUENCY/(16*9600)) - 1);
-           2'b10: baud_cnt = int'((FREQUENCY/(16*19200)) - 1);
-           2'b11: baud_cnt = int'((FREQUENCY/(16*38400)) - 1);
+    /// DECODE BAUD OPCODE ///
+    always_comb begin
+        case(br_cfg)
+           2'b00: baud_cnt_tb = int'((FREQUENCY/(16*4800)) - 1);
+           2'b01: baud_cnt_tb = int'((FREQUENCY/(16*9600)) - 1);
+           2'b10: baud_cnt_tb = int'((FREQUENCY/(16*19200)) - 1);
+           2'b11: baud_cnt_tb = int'((FREQUENCY/(16*38400)) - 1);
         endcase  
     end
 
-    string str1 = "hello";
-    string return_char;
+    always_ff @(posedge clk, negedge rst_n) begin
+        if (!rst_n) begin
+            state <= IDLE;
+        end
+        else begin
+            state <= nxt_state;
+        end
+    end
 
-    logic [7:0] send_data;
+    // Create Driver SM for TB Spart
+    always_comb begin: FSM
+        nxt_state = state;
+        iocs_tb = 1'b0;
+        iorw_tb = 1'b0;
+        ioaddr_tb = 2'b10;
+        databus_cntrl_tb = 2'b00;
+
+        case (state)
+            IDLE: begin
+                nxt_state = LOAD_LB;
+            end
+            LOAD_LB: begin
+                nxt_state = LOAD_HB;
+                ioaddr_tb = 2'b10;
+                databus_cntrl_tb = 2'b01;
+            end
+            LOAD_HB: begin
+                nxt_state = START_SEND;
+                ioaddr_tb = 2'b11;
+                databus_cntrl_tb = 2'b10;
+            end
+            START_SEND: begin
+                iorw_tb = 1'b0;
+                ioaddr_tb = 2'b00;
+                databus_cntrl_tb = 2'b11;
+                nxt_state = SEND;
+            end
+            SEND: begin
+                iorw_tb = 1'b0;
+                ioaddr_tb = 2'b00;
+
+                if (tbr_tb)
+                    nxt_state = START_RECEIVE;
+            end
+            START_RECEIVE: begin
+                iorw_tb = 1'b1;
+                ioaddr_tb = 2'b00;
+                nxt_state = RECEIVE;
+            end
+            RECEIVE: begin
+                iorw_tb = 1'b1;
+                ioaddr_tb = 2'b00;
+
+                if (rda_tb) 
+                    nxt_state = START_SEND;
+            end
+        endcase
+    end
+
+   string str1 = "hello";
+   string str2 = "hola";
 
     initial begin
+        clk = 1'b0;
+        rst_n = 1'b0; // RESET
+
+        ///////////////////////
+        ///// FIRST WORD //////
+        ///////////////////////
+
         // SET BAUD RATE TO 4800
-        SW[9:8] = 2'b00;
+        br_cfg = 2'b00;
 
-        databus = 8'hzz;
-        CLOCK_50 = 1'b0;
-        KEY[0] = 1'b1; //RESET
-
-        @(negedge CLOCK_50);
-        @(negedge CLOCK_50);
-        KEY[0] = 1'b0;
-
-        // LOAD BAUD RATE TO OUR SPART
-        @(posedge CLOCK_50);
-        ioaddr = 2'b10;
-        databus = baud_cnt[7:0];
-
-        @(posedge CLOCK_50);
-        ioaddr = 2'b11;
-        databus = baud_cnt[15:8];
+        @(negedge clk);
+        @(negedge clk);
+        rst_n = 1'b1;
 
         // SEND FIRST CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b0;
-        ioaddr = 2'b00;
-        databus = str1[0];
-        @(posedge CLOCK_50);
-        databus = 8'hzz;
-        @(posedge tbr);
+        data_tb = str1[0];
 
         // RECEIVE FIRST CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b1;
-        ioaddr = 2'b00;
-        databus = 8'hzz;
-        @(posedge CLOCK_50);
-        @(posedge rda);
-        //return_char = string'(databus);
-        $display("%c", spart1.databus);
-
-        repeat(50) @(posedge CLOCK_50);
-
-        /*
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
 
         // SEND SECOND CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b0;
-        ioaddr = 2'b00;
-        databus = str1[1];
-        @(posedge CLOCK_50);
-        @(posedge tbr);
+        data_tb = str1[1];
 
         // RECEIVE SECOND CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b1;
-        ioaddr = 2'b00;
-        databus = 8'hzz;
-        @(posedge CLOCK_50);
-        @(posedge rda);
-        return_char = string'(databus);
-        $write(return_char);
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
 
         // SEND THIRD CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b0;
-        ioaddr = 2'b00;
-        databus = str1[2];
-        @(posedge CLOCK_50);
-        @(posedge tbr);
+        data_tb = str1[2];
 
         // RECEIVE THIRD CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b1;
-        ioaddr = 2'b00;
-        databus = 8'hzz;
-        @(posedge CLOCK_50);
-        @(posedge rda);
-        return_char = string'(databus);
-        $write(return_char);
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
 
         // SEND FOURTH CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b0;
-        ioaddr = 2'b00;
-        databus = str1[3];
-        @(posedge CLOCK_50);
-        @(posedge tbr);
+        data_tb = str1[3];
 
         // RECEIVE FOURTH CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b1;
-        ioaddr = 2'b00;
-        databus = 8'hzz;
-        @(posedge CLOCK_50);
-        @(posedge rda);
-        return_char = string'(databus);
-        $write(return_char);
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
 
         // SEND FIFTH CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b0;
-        ioaddr = 2'b00;
-        databus = str1[4];
-        @(posedge CLOCK_50);
-        @(posedge tbr);
+        data_tb = str1[4];
 
         // RECEIVE FIFTH CHARACTER
-        @(posedge CLOCK_50);
-        iorw = 1'b1;
-        ioaddr = 2'b00;
-        databus = 8'hzz;
-        @(posedge CLOCK_50);
-        @(posedge rda);
-        return_char = string'(databus);
-        $write(return_char);
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
+        $write("\n");
 
-        */
+        ///////////////////////
+        ///// SECOND WORD /////
+        ///////////////////////
 
+        rst_n = 1'b0; // RESET
+
+        // SET BAUD RATE TO 19200
+        br_cfg = 2'b10;
+
+        @(negedge clk);
+        @(negedge clk);
+        rst_n = 1'b1;
+
+        // SEND FIRST CHARACTER
+        data_tb = str2[0];
+
+        // RECEIVE FIRST CHARACTER
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
+
+        // SEND SECOND CHARACTER
+        data_tb = str2[1];
+
+        // RECEIVE SECOND CHARACTER
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
+
+        // SEND THIRD CHARACTER
+        data_tb = str2[2];
+
+        // RECEIVE THIRD CHARACTER
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
+
+        // SEND FOURTH CHARACTER
+        data_tb = str2[3];
+
+        // RECEIVE FOURTH CHARACTER
+        @(posedge rda_tb);
+        $write("%c", databus_tb);
+
+        $write("\n\n");
         $stop();
-
 
     end
     
 
     always 
-        #5 CLOCK_50 = ~CLOCK_50;
+        #5 clk = ~clk;
 
 endmodule

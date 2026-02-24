@@ -29,7 +29,7 @@ module driver(
     inout wire [7:0] databus
     );
 
-    typedef enum logic [2:0] {IDLE, LOAD_LB, LOAD_HB, RECEIVE, START_SEND, SEND} state_t;
+    typedef enum logic [2:0] {IDLE, LOAD_LB, LOAD_HB, START_RECEIVE, RECEIVE, START_SEND, SEND} state_t;
 
     state_t state, nxt_state;
 
@@ -46,7 +46,7 @@ module driver(
 
     /// DECODE BAUD OPCODE ///
     always_comb begin : decoder
-        unique case(br_cfg)
+        case(br_cfg)
            2'b00: baud_cnt = int'((FREQUENCY/(16*4800)) - 1);
            2'b01: baud_cnt = int'((FREQUENCY/(16*9600)) - 1);
            2'b10: baud_cnt = int'((FREQUENCY/(16*19200)) - 1);
@@ -89,9 +89,14 @@ module driver(
                 databus_cntrl = 2'b01;
             end
             LOAD_HB: begin
-                nxt_state = RECEIVE;
+                nxt_state = START_RECEIVE;
                 ioaddr = 2'b11;
                 databus_cntrl = 2'b10;
+            end
+            START_RECEIVE: begin
+                iorw = 1'b1;
+                ioaddr = 2'b00;
+                nxt_state = RECEIVE;
             end
             RECEIVE: begin
                 iorw = 1'b1;
@@ -111,7 +116,7 @@ module driver(
                 ioaddr = 2'b00;
 
                 if (tbr)
-                    nxt_state = RECEIVE;
+                    nxt_state = START_RECEIVE;
             end
         endcase
     end

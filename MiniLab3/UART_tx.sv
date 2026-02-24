@@ -28,6 +28,9 @@ module UART_tx(
   logic transmitting; // Asserted whenever we are still transmitting data along TX line.
   logic [3:0] bit_cnt; // Count to keep track of how many bits of data we shifted.
   logic set_done;     // Asserted whenever the transmission of a packet is finished (10-bits).
+  logic trmt_set;     // Held high after trmt asserted to synch start of transmission with baud clk
+  logic clr_trmt_set;  // Used to clear the trmt_set signal once transmission has started
+  logic [7:0] tx_data_saved;  // Used to load the shift register on start of transmission
   state_t state;     // Holds the current state.
 	state_t nxt_state; // Holds the next state.		
   ///////////////////////////////////////////////
@@ -37,7 +40,7 @@ module UART_tx(
       if(!rst_n)
         tx_shft_reg <= 9'h1FF; // Reset the register to all ones, indicating line is IDLE.
       else if (init)
-        tx_shft_reg <= {tx_data, 1'b0}; // If init is asserted, load the data in along with the start bit.
+        tx_shft_reg <= {tx_data_saved, 1'b0}; // If init is asserted, load the data in along with the start bit.
       else if (shift)          
         tx_shft_reg <= {1'b1, tx_shft_reg[8:1]}; // Begin shifting out the data 1-bit each, starting with LSB.
   end
@@ -51,10 +54,10 @@ module UART_tx(
   end
 
   // Take the LSB of the shift register as the data shifted out, i.e., on the TX line.
-  assign TX = tx_shft_reg[0];
+  assign TX = (state == TRM) ? tx_shft_reg[0] : 1'b1;
     
   // We shift out data whenever we reach a baud count of 2604 clock cycles.
-  assign shift = baud_en;
+  assign shift = baud_en & (state == TRM);
   
   ////////////////////////////////////
 	// Implement State Machine Logic //
@@ -76,7 +79,26 @@ module UART_tx(
         tx_done <= 1'b0; // Clear the flop synchronously.
       else if (set_done)
         tx_done <= 1'b1; // Synchronously preset the flop to 1, if transmission is done.
+      else 
+        tx_done <= 1'b0;
   end
+
+  always_ff @(posedge clk, negedge rst_n) begin
+      if(!rst_n)
+        trmt_set <= 1'b0; 
+      else if (clr_trmt_set)
+        trmt_set <= 1'b0;
+      else if (trmt)          
+        trmt_set <= 1'b1;
+  end
+
+  always_ff @(posedge clk, negedge rst_n) begin
+      if(!rst_n)
+        tx_data_saved <= 8'h00; 
+      else if (trmt)          
+        tx_data_saved <= tx_data;
+  end
+
 
   /////////////////////////////////////////
 	// Default all SM outputs & nxt_state //
@@ -87,6 +109,7 @@ module UART_tx(
     init = 1'b0; // By defualt, init is low.
     transmitting = 1'b0; // By default, assume data is not being transmitted. 
     set_done = 1'b0; // By default, rdy is not asserted.
+    clr_trmt_set = 1'b0;
         		
 		case (state)
 		  TRM : begin // Transmit the data.
@@ -99,9 +122,10 @@ module UART_tx(
       end
 
       default : begin // Used as the IDLE state. Checks if trmt is asserted, else stay in the current state.
-        if(trmt) begin
+        if(trmt_set && baud_en) begin
 			      nxt_state = TRM; // If go is asserted, next state is TRM, and shifting data begins.
             init = 1'b1; // Assert init, to initialize the operands and begin the shifting.
+            clr_trmt_set = 1'b1;
         end
       end
 		endcase

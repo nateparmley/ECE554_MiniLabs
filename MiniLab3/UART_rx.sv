@@ -65,7 +65,7 @@ module UART_rx(
   assign rx_data = rx_shft_reg[7:0];
     
   // We shift in data whenever we counted down all clock cycles for the baud rate.
-  assign shift = baud_en;
+  assign shift = baud_en & (state == RCV);
   
   ////////////////////////////////////
 	// Implement State Machine Logic //
@@ -89,6 +89,8 @@ module UART_rx(
         rdy <= 1'b0; // Knocks down rdy when asserted.
       else if (set_rdy)
         rdy <= 1'b1; // Synchronously preset the flop to 1, if a byte is received.
+      else 
+        rdy <= 1'b0;
   end
 
   // Implements the combinational state transition and output logic of the state machine.

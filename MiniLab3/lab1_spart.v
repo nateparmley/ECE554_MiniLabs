@@ -29,9 +29,8 @@ module lab1_spart(
     input        [9:0]  SW,
 
  //////////// GPIO_0, GPIO_0 connect to GPIO Default //////////
-    //inout       [35:0]  GPIO
-    output GPIO_TX,
-    input GPIO_RX
+    output GPIO_TX, // GPIO_0[0]
+    input GPIO_RX   // GPIO_0[1]
 );
 
 wire txd;
@@ -41,7 +40,7 @@ wire iorw;
 wire rda;
 wire tbr;
 wire [1:0] ioaddr;
-wire [7:0] databus;
+tri [7:0] databus;
 wire [1:0] br_cfg;
 
 // press button[0] to generate a low active reset signal
