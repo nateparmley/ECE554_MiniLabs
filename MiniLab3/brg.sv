@@ -14,6 +14,7 @@ module brg(
     logic load_db_done_ff;
     logic [15:0] divisor_buffer;
     logic [15:0] down_cntr;
+    logic [3:0] down_cntr_wrapper;
 
     /// DIVISOR BUFFER ///
     always_ff @(posedge clk, negedge rst_n) begin
@@ -37,10 +38,18 @@ module brg(
     always_ff @(posedge clk, negedge rst_n) begin
         if (!rst_n)
             down_cntr <= 16'hFFFF;
-        else if ((load_db_done && !load_db_done_ff) | baud_trmt_en)
+        else if ((load_db_done && !load_db_done_ff) | (down_cntr == 16'h0000))
             down_cntr <= divisor_buffer;
         else
             down_cntr <= down_cntr - 1'b1;
+    end
+
+    /// DOWN COUNTER WRAPPER ///
+    always_ff @(posedge clk, negedge rst_n) begin
+        if (!rst_n)
+            down_cntr_wrapper <= 4'hF;
+        else if (down_cntr == 16'h0000)
+            down_cntr_wrapper <= down_cntr_wrapper - 1'b1;
     end
 
     always_ff @(posedge clk, negedge rst_n) begin
@@ -50,8 +59,8 @@ module brg(
           load_db_done_ff <= load_db_done;
     end
 
-    assign baud_trmt_en = (down_cntr == 16'h0000);
-    assign baud_receive_en = (down_cntr == {1'b0, (divisor_buffer[15:1])});
+    assign baud_trmt_en = (down_cntr_wrapper == 4'h0 && down_cntr == 16'h0000);
+    assign baud_receive_en = (down_cntr_wrapper == 4'h8 && down_cntr == 16'h0000);
     
 
 endmodule

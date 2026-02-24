@@ -42,7 +42,7 @@ module driver(
                                                                         : ((databus_cntrl == 2'b01) ? baud_cnt[7:0]
                                                                                                    : 8'hzz));
 
-    localparam FREQUENCY = 25000000;
+    localparam FREQUENCY = 50000000;
 
     /// DECODE BAUD OPCODE ///
     always_comb begin : decoder

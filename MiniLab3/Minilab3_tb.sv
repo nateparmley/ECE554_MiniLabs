@@ -1,11 +1,11 @@
-module lab1_spart_tb();
+module Minilab3_tb();
 
    // DUT Signals
    logic clk, rst_n;
    logic [1:0] br_cfg;
    logic txd_dut, rxd_dut;
 
-    lab1_spart iDUT(
+    Minilab3 iDUT(
       .CLOCK_50(clk),
       .CLOCK2_50(),
       .CLOCK3_50(),
@@ -16,7 +16,7 @@ module lab1_spart_tb();
       .HEX3(),
       .HEX4(),
       .HEX5(),
-      .KEY({3'b000, ~rst_n}),
+      .KEY({3'b000, rst_n}),
       .LEDR(),
       .SW({br_cfg, 8'h00}),
       .GPIO_TX(txd_dut),
@@ -55,7 +55,7 @@ module lab1_spart_tb();
                                                                         : ((databus_cntrl_tb == 2'b01) ? baud_cnt_tb[7:0]
                                                                                                    : 8'hzz));
 
-    localparam FREQUENCY = 25000000;
+    localparam FREQUENCY = 50000000;
 
     /// DECODE BAUD OPCODE ///
     always_comb begin
